@@ -2,8 +2,12 @@
 
 <!-- This is an Apify template readme -->
 
+▶️ [Try it live on Apify Store](https://apify.com/woolen-snake/package-health-checker)
+
 A template for running and monetizing a [Model Context Protocol](https://modelcontextprotocol.io) server using [stdio](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio) transport on [Apify platform](https://docs.apify.com/platform).
 This allows you to run any stdio MCP server as a [standby Actor](https://docs.apify.com/platform/actors/development/programming-interface/standby) and connect via either the [streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) with an [MCP client](https://modelcontextprotocol.io/clients).
+
+Note: the `check_dependency_tree_risk` tool only scans the first 100 packages found in a `package-lock.json` and only returns details for Medium-severity-or-above findings, to keep results bounded on very large dependency trees.
 
 ## How to use
 
