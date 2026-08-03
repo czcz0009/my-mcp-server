@@ -1,0 +1,24 @@
+{
+	"$schema": "https://apify.com/schemas/v1/actor.ide.json",
+	"actorSpecification": 1,
+	"name": "package-health-checker",
+	"title": "Package Health Checker MCP Server",
+	"description": "npm パッケージの健全性・既知脆弱性(単体/依存ツリー)をチェックするMCPサーバー。",
+	"version": "0.0",
+	"buildTag": "latest",
+	"usesStandbyMode": true,
+	"meta": {
+		"templateId": "ts-mcp-proxy",
+		"generatedBy": "Claude Code with Claude Sonnet 5"
+	},
+	"inputSchema": {
+		"title": "Actor input schema",
+		"description": "This is Actor input schema",
+		"type": "object",
+		"schemaVersion": 1,
+		"properties": {},
+		"required": []
+	},
+	"dockerfile": "../Dockerfile",
+	"webServerMcpPath": "/mcp"
+}

@@ -1,0 +1,17 @@
+{
+    "check-package-health": {
+        "eventTitle": "Package health check",
+        "eventDescription": "Check maintenance status of a single npm package.",
+        "eventPriceUsd": 0.01
+    },
+    "check-vulnerabilities": {
+        "eventTitle": "Vulnerability check",
+        "eventDescription": "Check known vulnerabilities for a single npm package.",
+        "eventPriceUsd": 0.01
+    },
+    "check-dependency-tree": {
+        "eventTitle": "Dependency tree scan",
+        "eventDescription": "Scan a package-lock.json for direct and transitive vulnerabilities.",
+        "eventPriceUsd": 0.03
+    }
+}
