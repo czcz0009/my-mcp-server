@@ -71,8 +71,10 @@ server.registerTool(
   {
     title: 'npm パッケージの既知脆弱性チェック',
     description:
-      'OSV.dev に問い合わせて、指定パッケージ(バージョン指定があればそのバージョンに影響するもの、' +
-      '未指定なら全バージョン対象)の既知脆弱性を取得する。間接依存の脆弱性は対象外。',
+      'OSV.dev と GitHub Security Advisories (GHSA) の両方に問い合わせて、指定パッケージ' +
+      '(バージョン指定があればそのバージョンに影響するもの、未指定なら全バージョン対象)の' +
+      '既知脆弱性を取得する。同一脆弱性はCVE ID等で重複排除され、各結果の"source"に' +
+      '"osv"|"ghsa"|"both"のいずれかが入る。間接依存の脆弱性は対象外。',
     inputSchema: {
       packageName: z.string().describe('npm パッケージ名 (例: "minimist")'),
       version: z.string().optional().describe('対象バージョン(省略時は全バージョンを対象に検索)'),

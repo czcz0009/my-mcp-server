@@ -138,34 +138,193 @@ function summarizeVulnerabilities(vulns) {
       }
     }
 
+    // CVE IDを抜き出しておく(GHSA側の結果とのマージで突き合わせキーに使う)。
+    // OSVのidそのものがCVEの場合と、aliasesにCVEが入っている場合がある。
+    const cveId = v.id?.startsWith('CVE-') ? v.id : (v.aliases || []).find(a => a.startsWith('CVE-')) || null;
+
     return {
       id: v.id,
+      cveId,
       summary: v.summary || v.details?.slice(0, 200) || '詳細なし',
       severityLevel,
       cvssVector,
       publishedDate: v.published || null,
       affectedRanges: v.affected?.map(a => a.ranges).flat() || [],
       references: (v.references || []).map(r => r.url).slice(0, 3),
+      source: 'osv',
     };
   });
 }
 
+const GHSA_SEVERITY_MAP = { critical: 'Critical', high: 'High', medium: 'Medium', low: 'Low' };
+
+/**
+ * GitHub Security Advisories (GHSA) に既知の脆弱性を問い合わせる。
+ * version を指定すると affects=name@version でその バージョンに影響するものだけに絞り込む
+ * (GitHub REST APIの affects パラメータが name@version 形式をサポートしていることを実機で確認済み)。
+ *
+ * 認証なしでも動作するが、未認証だとレート制限は60回/時までしかない(実機で X-RateLimit-Limit: 60 を確認)。
+ * GITHUB_TOKEN または GH_TOKEN 環境変数にPersonal Access Tokenを設定すれば、
+ * Authorizationヘッダが自動的に付与され、レート制限が5000回/時まで上がる。
+ */
+async function fetchGhsaAdvisories(packageName, version, ecosystem = 'npm') {
+  const affects = version ? `${packageName}@${version}` : packageName;
+  const url = `https://api.github.com/advisories?ecosystem=${encodeURIComponent(ecosystem)}&affects=${encodeURIComponent(affects)}`;
+
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(url, { headers });
+
+  // X-RateLimit-Limit: 認証されていれば5000、未認証(GITHUB_TOKEN未設定 or 無効)なら60になる。
+  // GITHUB_TOKENが正しく効いているかどうかの診断に使う。
+  const rateLimit = {
+    limit: res.headers.get('x-ratelimit-limit') ? Number(res.headers.get('x-ratelimit-limit')) : null,
+    remaining: res.headers.get('x-ratelimit-remaining') ? Number(res.headers.get('x-ratelimit-remaining')) : null,
+    authenticated: Boolean(token),
+  };
+
+  if (!res.ok) {
+    const err = new Error(`GitHub Advisories への問い合わせに失敗しました (status: ${res.status})`);
+    err.ghsaRateLimit = rateLimit;
+    throw err;
+  }
+
+  const advisories = await res.json();
+  // withdrawn(撤回)された勧告は現行の脆弱性として報告しない
+  return { advisories: advisories.filter(a => !a.withdrawn_at), rateLimit };
+}
+
+/**
+ * GHSAのレコードを、summarizeVulnerabilities() と突き合わせやすい形に整形する。
+ * GHSA特有の付加情報(reviewed状態・CWE分類・パッチ情報)もここで抜き出す。
+ */
+function summarizeGhsaAdvisories(advisories) {
+  return advisories.map(a => ({
+    id: a.ghsa_id,
+    cveId: a.cve_id || null,
+    summary: a.summary || a.description?.slice(0, 200) || '詳細なし',
+    severityLevel: GHSA_SEVERITY_MAP[a.severity] || '不明',
+    cvssVector: a.cvss?.vector_string || null,
+    publishedDate: a.published_at || null,
+    references: (a.references || []).slice(0, 3),
+    source: 'ghsa',
+    // GHSA特有の付加情報
+    ghsaReviewed: a.type === 'reviewed',
+    cwes: (a.cwes || []).map(c => ({ id: c.cwe_id, name: c.name })),
+    // GHSAは「パッチのコミットURL」自体は返さないため、
+    // 実際に取得できる範囲(修正済みバージョン + 勧告ページURL)をパッチ情報として提供する。
+    patchInfo: (a.vulnerabilities || []).map(v => ({
+      vulnerableVersionRange: v.vulnerable_version_range,
+      firstPatchedVersion: v.first_patched_version || null,
+    })),
+    advisoryUrl: a.html_url || null,
+  }));
+}
+
+/**
+ * OSV.devとGHSAの結果を、同じ脆弱性について重複が出ないようマージする。
+ * 突き合わせは cveId を優先、無ければ id(OSVのidがそのままGHSA IDのケースが多い)で行う。
+ * 両方に存在するものは source: 'both' とし、GHSA側の付加情報(reviewed/cwes/patchInfo等)を
+ * OSV側のオブジェクトに追加フィールドとして統合する(深刻度判定はOSV側のCVSS解析ロジックを優先)。
+ */
+function mergeVulnerabilitySources(osvVulns, ghsaVulns) {
+  const matchedGhsaIndexes = new Set();
+
+  const merged = osvVulns.map(osvItem => {
+    const matchIndex = ghsaVulns.findIndex((g, idx) => {
+      if (matchedGhsaIndexes.has(idx)) return false;
+      if (osvItem.cveId && g.cveId && osvItem.cveId === g.cveId) return true;
+      return osvItem.id === g.id;
+    });
+
+    if (matchIndex === -1) {
+      return osvItem;
+    }
+
+    const g = ghsaVulns[matchIndex];
+    matchedGhsaIndexes.add(matchIndex);
+
+    return {
+      ...osvItem,
+      source: 'both',
+      ghsaReviewed: g.ghsaReviewed,
+      cwes: g.cwes,
+      patchInfo: g.patchInfo,
+      advisoryUrl: g.advisoryUrl,
+    };
+  });
+
+  // OSV側では見つからなかったGHSA単独の脆弱性も追加する
+  ghsaVulns.forEach((g, idx) => {
+    if (matchedGhsaIndexes.has(idx)) return;
+    merged.push({
+      id: g.id,
+      cveId: g.cveId,
+      summary: g.summary,
+      severityLevel: g.severityLevel,
+      cvssVector: g.cvssVector,
+      publishedDate: g.publishedDate,
+      affectedRanges: [], // GHSA単独時はOSV形式のrangesが無いため空(patchInfoを参照)
+      references: g.references,
+      source: 'ghsa',
+      ghsaReviewed: g.ghsaReviewed,
+      cwes: g.cwes,
+      patchInfo: g.patchInfo,
+      advisoryUrl: g.advisoryUrl,
+    });
+  });
+
+  return merged;
+}
+
 async function checkVulnerabilities(packageName, version, ecosystem = 'npm') {
   const rawVulns = await fetchVulnerabilities(packageName, version, ecosystem);
-  const summarized = summarizeVulnerabilities(rawVulns);
+  const osvSummarized = summarizeVulnerabilities(rawVulns);
 
-  const criticalOrHigh = summarized.filter(
+  // GHSA側の問い合わせ失敗はOSV側の結果に影響させない(個別にtry/catchする)
+  let ghsaSummarized = [];
+  let ghsaLookupError = null;
+  let ghsaRateLimit = null;
+  try {
+    const { advisories: rawAdvisories, rateLimit } = await fetchGhsaAdvisories(packageName, version, ecosystem);
+    ghsaSummarized = summarizeGhsaAdvisories(rawAdvisories);
+    ghsaRateLimit = rateLimit;
+  } catch (err) {
+    ghsaLookupError = err.message;
+    ghsaRateLimit = err.ghsaRateLimit || null;
+  }
+
+  const merged = mergeVulnerabilitySources(osvSummarized, ghsaSummarized);
+
+  const criticalOrHigh = merged.filter(
     v => v.severityLevel === 'Critical' || v.severityLevel === 'High'
   );
 
-  return {
+  const result = {
     packageName,
     version: version || '(全バージョン対象)',
     ecosystem,
-    totalVulnerabilities: summarized.length,
+    totalVulnerabilities: merged.length,
     criticalOrHighCount: criticalOrHigh.length,
-    vulnerabilities: summarized,
+    vulnerabilities: merged,
   };
+
+  if (ghsaLookupError) {
+    result.ghsaLookupError = ghsaLookupError; // GHSA側のみ失敗した場合も可視化する(OSV結果は返せている)
+  }
+  if (ghsaRateLimit) {
+    // GITHUB_TOKENが効いているかの診断用(limit: 5000=認証成功 / 60=未認証)
+    result.ghsaRateLimit = ghsaRateLimit;
+  }
+
+  return result;
 }
 
 // ---- check_dependency_tree_risk 関連 ----
@@ -471,6 +630,9 @@ module.exports = {
   analyzeHealth,
   fetchVulnerabilities,
   summarizeVulnerabilities,
+  fetchGhsaAdvisories,
+  summarizeGhsaAdvisories,
+  mergeVulnerabilitySources,
   checkVulnerabilities,
   checkDependencyTreeRisk,
   extractPackagesFromLockfile,
