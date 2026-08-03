@@ -77,6 +77,16 @@ To set up the PPE model for this Actor:
 
 - **Configure Pay Per Event**: establish the Pay Per Event pricing schema in the Actor's **Monetization settings**. First, set the **Pricing model** to `Pay per event` and add the schema. An example schema can be found in [pay_per_event.json](.actor/pay_per_event.json).
 
+## Developer notes (internal)
+
+- **Standby idle timeout is currently 90s** (lowered from the Apify default of 300s), set via the Actor's Standby settings on Apify Console/API — this is **not** part of `actor.json`, since Apify doesn't expose `idleTimeoutSecs` there. Rationale: with no real users yet, minimizing "accidentally left warm" compute cost during manual testing takes priority over cold-start latency. Revisit (raise it back up) once cold starts become a real problem for actual users.
+- **After any manual testing session against the deployed standby URL, explicitly abort the run** — don't rely on the idle timeout alone:
+  ```bash
+  npx apify-cli runs ls --actor-id <actorId>       # find the run
+  npx apify-cli runs abort <runId>                 # or POST /v2/actor-runs/{runId}/abort
+  ```
+  Repeated test calls spaced less than the idle timeout apart keep the *same* run alive for the whole session. This previously caused runs lasting 4+ hours and real billed compute ($0.88–$1.10) before being caught — see run history for details.
+
 ## Resources
 
 - [What is Anthropic's Model Context Protocol?](https://blog.apify.com/what-is-model-context-protocol/)
