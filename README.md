@@ -2,7 +2,7 @@
 
 <!-- This is an Apify template readme -->
 
-▶️ [Try it live on Apify Store](https://apify.com/woolen-snake/package-health-checker)
+▶️ [Try it live on Apify Store](https://apify.com/woolen_snake/package-health-checker)
 
 A template for running and monetizing a [Model Context Protocol](https://modelcontextprotocol.io) server using [stdio](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio) transport on [Apify platform](https://docs.apify.com/platform).
 This allows you to run any stdio MCP server as a [standby Actor](https://docs.apify.com/platform/actors/development/programming-interface/standby) and connect via either the [streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) with an [MCP client](https://modelcontextprotocol.io/clients).
