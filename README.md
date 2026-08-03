@@ -7,6 +7,8 @@
 A template for running and monetizing a [Model Context Protocol](https://modelcontextprotocol.io) server using [stdio](https://modelcontextprotocol.io/docs/concepts/transports#standard-input%2Foutput-stdio) transport on [Apify platform](https://docs.apify.com/platform).
 This allows you to run any stdio MCP server as a [standby Actor](https://docs.apify.com/platform/actors/development/programming-interface/standby) and connect via either the [streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http) with an [MCP client](https://modelcontextprotocol.io/clients).
 
+This Actor exposes 3 MCP tools (`check_package_health`, `check_vulnerabilities`, `check_dependency_tree_risk`). Vulnerabilities are cross-referenced from both [OSV.dev](https://osv.dev) and [GitHub Security Advisories](https://github.com/advisories) by CVE ID — matched findings are tagged `source: "both"` and enriched with GHSA-specific data (reviewed status, CWE classification, patch info).
+
 Note: the `check_dependency_tree_risk` tool only scans the first 100 packages found in a `package-lock.json` and only returns details for Medium-severity-or-above findings, to keep results bounded on very large dependency trees.
 
 ## How to use
