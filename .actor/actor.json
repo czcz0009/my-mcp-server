@@ -2,7 +2,7 @@
 	"$schema": "https://apify.com/schemas/v1/actor.ide.json",
 	"actorSpecification": 1,
 	"name": "package-health-checker",
-	"title": "Package Health & Supply Chain Risk Checker (MCP)",
+	"title": "npm Package & Dependency Vulnerability Checker (MCP)",
 	"description": "Audit npm packages and their dependency tree for security risk — not just single packages. Checks vulnerabilities via OSV.dev + GitHub Security Advisories (CVE-matched, CWE + patch info), transitive deps from package-lock.json, and maintenance health. An MCP server for Claude, Cursor & more.",
 	"version": "0.0",
 	"buildTag": "latest",
